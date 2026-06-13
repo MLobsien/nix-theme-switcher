@@ -40,8 +40,12 @@
             };
           }
           {
+            nixpkgs = {inherit (pkgs.stdenv) hostPlatform;};
             boot.loader.systemd-boot.enable = true;
-            fileSystems."/".device = "/dev/sda1";
+            fileSystems."/" = {
+              device = "/dev/sda1";
+              fsType = "ext4";
+            };
           }
         ];
     };
