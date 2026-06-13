@@ -1,6 +1,10 @@
 {pkgs, ...}: {
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
+  fileSystems."/" = {
+    device = "/dev/sda1";
+    fsType = "ext4";
+  };
 
   networking.hostName = "theme-switcher-example";
 
@@ -76,8 +80,8 @@
   security.sudo.wheelNeedsPassword = false;
 
   services.xserver.enable = true;
-  services.xserver.displayManager.gdm.enable = true;
-  services.xserver.desktopManager.gnome.enable = true;
+  services.displayManager.gdm.enable = true;
+  services.desktopManager.gnome.enable = true;
 
   services.openssh.enable = true;
 

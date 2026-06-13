@@ -11,7 +11,7 @@
 
   inherit (lib) concatStringsSep attrNames concatLines;
 
-  evalTheme = themeConfig: let
+  evalTheme = _: themeConfig: let
     modulesPath = "${pkgs.path}/nixos/modules";
     result = lib.evalModules {
       class = "nixos";
