@@ -85,7 +85,7 @@
       esac
     }
 
-    CHOICE=$(echo "${concatStringsSep "\\n" themeNames}" | ${cfg.frontend})
+    CHOICE=$(echo -e "${concatStringsSep "\\n" themeNames}" | ${cfg.frontend})
     applyTheme $CHOICE
   '';
 in {
