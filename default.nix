@@ -54,7 +54,7 @@
       themeConfig.stylix.targets
       // themeConfig.home-manager.users.${cfg.user}.stylix.targets;
   in ''
-    ${theme})
+    "${theme}")
     ${lib.pipe allTargets [
       (lib.filterAttrs (name: stylixTarget: let
         target = targetsForTheme.${name};
