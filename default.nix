@@ -6,76 +6,69 @@
   lib,
   pkgs,
   ...
-}: let
+} @ specialArgs: let
   cfg = config.nix-theme-switcher;
 
   inherit (lib) concatStringsSep attrNames concatLines;
 
   evalTheme = _: themeConfig: let
-    modulesPath = "${pkgs.path}/nixos/modules";
-    result = lib.evalModules {
-      class = "nixos";
-      specialArgs = {inherit modulesPath;};
-      modules =
-        (import "${modulesPath}/module-list.nix")
-        ++ [
-          stylix.nixosModules.stylix
-          home-manager.nixosModules.home-manager
-          {
-            stylix =
-              (config.stylix or {})
-              // themeConfig
-              // {
-                enable = true;
-              };
-          }
-          {
-            home-manager = {
-              useGlobalPkgs = true;
-              users.stylix = {
-                home.username = "stylix";
-                home.homeDirectory = "/home/stylix";
-                home.stateVersion = "24.11";
-              };
+    nixosEval = import "${pkgs.path}/nixos/lib/eval-config.nix" {
+      # inherit specialArgs;
+      inherit (pkgs.stdenv.hostPlatform) system;
+      modules = let
+        stylixCfg = themeConfig // {enable = true;};
+      in [
+        home-manager.nixosModules.home-manager
+        stylix.nixosModules.stylix
+        {stylix = lib.mkForce stylixCfg;}
+        {
+          users.users.${cfg.user} = {};
+          home-manager.users.${cfg.user} = {
+            home = {
+              stateVersion = "24.11";
             };
-          }
-          {
-            nixpkgs = {inherit (pkgs.stdenv) hostPlatform;};
-            boot.loader.systemd-boot.enable = true;
-            fileSystems."/" = {
-              device = "/dev/sda1";
-              fsType = "ext4";
-            };
-          }
-        ];
+            stylix = lib.mkForce stylixCfg;
+          };
+        }
+        # (lib.removeAttrs config ["_module" "nix-theme-switcher" "passthru"]) #"stylix"])
+        # {options = lib.removeAttrs options ["_module" "nix-theme-switcher" "passthru"];}
+      ];
     };
   in
-    result.config;
+    nixosEval.config;
 
-  targetsFn = import ./targets.nix;
+  targets = import ./targets.nix;
 
   themes' = lib.mapAttrs evalTheme cfg.themes;
 
-  themeNames = attrNames themes';
-
   applyTargetsForTheme = theme: let
     themeConfig = themes'.${theme};
-    targets =
-      (targetsFn {
+    targetsForTheme =
+      targets {
         inherit lib;
+        inherit (cfg) user;
         config = themeConfig;
-      })
+      }
       // cfg.targets;
-    allTargets = themeConfig.stylix.targets // themeConfig.home-manager.users.stylix.targets;
+    allTargets =
+      themeConfig.stylix.targets
+      // themeConfig.home-manager.users.${cfg.user}.stylix.targets;
   in ''
     ${theme})
     ${lib.pipe allTargets [
-      (lib.filterAttrs (_: target: target.enable))
+      (lib.filterAttrs (name: stylixTarget: let
+        target = targetsForTheme.${name};
+      in
+        stylixTarget.enable && target.enable != null && target.enable))
       (lib.mapAttrsToList (
         name: _: let
-          target = targets.${name};
+          target = targetsForTheme.${name};
         in
-          concatLines (map (file: "ln -sf ${target.dest} ${file}") target.configFiles)
+          concatLines (map (file:
+            if target.dest != null
+            then "ln -sf ${target.dest} ${file}"
+            else "")
+          target.configFiles)
           + (target.reload or "")
       ))
       concatLines
@@ -83,19 +76,26 @@
     ;;
   '';
 
-  applyThemes = pkgs.writeShellScript "nix-theme-switcher-apply" ''
+  themeNames = attrNames themes';
+
+  applyThemes = pkgs.writeShellScriptBin "nix-theme-switcher-apply" ''
     applyTheme() {
       case "$1" in
         ${concatLines (map applyTargetsForTheme themeNames)}
       esac
     }
 
-    CHOICE=$(echo ${concatStringsSep "\\\n" themeNames} | ${cfg.frontend})
+    CHOICE=$(echo "${concatStringsSep "\\n" themeNames}" | ${cfg.frontend})
     applyTheme $CHOICE
   '';
 in {
   options.nix-theme-switcher = {
     enable = lib.mkEnableOption "nix-theme-switcher";
+
+    user = lib.mkOption {
+      type = lib.types.str;
+      default = "stylix";
+    };
 
     themes = lib.mkOption {
       type = with lib.types; attrsOf (lazyAttrsOf anything);
@@ -136,7 +136,7 @@ in {
     };
 
     themes' = lib.mkOption {
-      type = with lib.types; attrsOf package;
+      type = with lib.types; attrsOf anything;
       readOnly = true;
       internal = true;
     };

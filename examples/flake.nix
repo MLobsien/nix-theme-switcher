@@ -28,6 +28,7 @@
         home-manager.nixosModules.home-manager
         nix-theme-switcher.nixosModules.default
         ./configuration.nix
+        ./themes.nix
       ];
     };
   };
