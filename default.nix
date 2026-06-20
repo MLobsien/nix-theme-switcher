@@ -14,17 +14,49 @@
   inherit (lib) concatStringsSep concatStrings attrNames setAttrByPath attrByPath take flatten listToAttrs mapAttrsToList elemAt filter recursiveUpdate mkDefault;
 
   evalTheme = _: themeConfig: let
-    targets = import ./targets/input.nix {inherit config lib hmConfigPath;};
-    targetsConfig = lib.foldl' lib.recursiveUpdate {} (map (target: let
+    allTargets = lib.mapAttrsToList (name: value: {inherit name value;})
+      (import ./targets/input.nix {inherit config lib hmConfigPath;});
+
+    # Pre-compute raw injection data per target (uses outer eval)
+    targetInjects = map (target: let
       basePath = target.value.base;
       inject = basePath != null && target.value.enable != null && target.value.enable;
       optsVal = attrByPath (hmConfigPath ++ basePath) null options;
-      # external targets: only inject if options are accessible
       doInject = if inject && target.value ? external then optsVal != null else inject;
-    in
-      { config = if doInject then mkDefault (setAttrByPath basePath (attrByPath (hmConfigPath ++ basePath) null config)) else {}; }
-      // (if doInject && target.value ? external then { options = setAttrByPath (["options"] ++ basePath) optsVal; } else {})
-    ) (lib.mapAttrsToList (name: value: {inherit name value;}) targets));
+    in {
+      inherit basePath;
+      value = if doInject then attrByPath (hmConfigPath ++ basePath) null config else null;
+      optsVal = if doInject && target.value ? external then optsVal else null;
+    }) allTargets;
+
+    # Module function — runs inside inner eval with access to its options tree
+    targetsConfig = { options, lib, ... }: let
+      inherit (lib) attrByPath setAttrByPath mkDefault filterAttrs mapAttrs recursiveUpdate;
+
+      # Recursively strip readOnly option values
+      filterRO = path: value:
+        if !builtins.isAttrs value then value
+        else
+          let opt = attrByPath path null options; in
+          if opt != null && (opt._type or "") == "option" then
+            if opt.readOnly or false then null else value
+          else
+            filterAttrs (n: v: v != null)
+              (mapAttrs (n: v: filterRO (path ++ [n]) v) value);
+
+      # Injected config with readOnly option values removed
+      configInjects = builtins.foldl' recursiveUpdate {} (map (inj:
+        if inj.value == null then {}
+        else setAttrByPath inj.basePath (mkDefault (filterRO inj.basePath inj.value))
+      ) targetInjects);
+
+      # Option declarations for external targets
+      optionsInjects = builtins.foldl' recursiveUpdate {} (map (inj:
+        if inj.optsVal != null then setAttrByPath (["options"] ++ inj.basePath) inj.optsVal else {}
+      ) targetInjects);
+    in {
+      config = configInjects;
+    } // optionsInjects;
 
     nixosEval = import "${pkgs.path}/nixos/lib/eval-config.nix" {
       inherit (pkgs.stdenv.hostPlatform) system;
@@ -42,7 +74,6 @@
     };
   in
     nixosEval.config.home-manager.users.${cfg.user};
-
   targetPaths = import ./targets/output.nix;
 
   themes' = lib.mapAttrs evalTheme cfg.themes;

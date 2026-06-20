@@ -20,10 +20,11 @@
   };
 
   home-manager.users.alice = {
-    imports = [ nixvim.homeManagerModules.nixvim ];
+    imports = [nixvim.homeManagerModules.nixvim];
     home.stateVersion = "24.11";
     programs.waybar.enable = true;
     programs.nixvim.enable = true;
+    wayland.windowManager.hyprland.enable = true;
   };
 
   environment.systemPackages = with pkgs; [
