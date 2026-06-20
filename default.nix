@@ -33,18 +33,19 @@
     targetsConfig = { options, lib, ... }: let
       inherit (lib) attrByPath setAttrByPath mkDefault filterAttrs mapAttrs recursiveUpdate;
 
-      # Recursively strip readOnly option values
+      # Recursively strip readOnly and removed option values
       filterRO = path: value:
         if !builtins.isAttrs value then value
         else
           let opt = attrByPath path null options; in
-          if opt != null && (opt._type or "") == "option" then
-            if opt.readOnly or false then null else value
+          if opt == null then null  # option doesn't exist at this path
+          else if (opt._type or "") == "option" then
+            if opt.readOnly or false || (opt.visible or true) == false
+            then null
+            else value
           else
             filterAttrs (n: v: v != null)
               (mapAttrs (n: v: filterRO (path ++ [n]) v) value);
-
-      # Injected config with readOnly option values removed
       configInjects = builtins.foldl' recursiveUpdate {} (map (inj:
         if inj.value == null then {}
         else setAttrByPath inj.basePath (mkDefault (filterRO inj.basePath inj.value))
@@ -81,7 +82,9 @@
   applyTargetsForTheme = theme: let
     themeConfig = themes'.${theme};
     evalTarget = target: let
-      hm = path: attrByPath path null themeConfig;
+      hm = path: let
+        r = builtins.tryEval (attrByPath path null themeConfig);
+      in if r.success then r.value else null;
     in {
       enable = if target.enablePath != null then hm target.enablePath else true;
       dest = if target.srcPath != null then hm target.srcPath else null;

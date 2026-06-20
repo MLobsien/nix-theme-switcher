@@ -24,7 +24,7 @@
     home.stateVersion = "24.11";
     programs.waybar.enable = true;
     programs.nixvim.enable = true;
-    wayland.windowManager.hyprland.enable = true;
+    programs.rofi.enable = true;
   };
 
   environment.systemPackages = with pkgs; [
