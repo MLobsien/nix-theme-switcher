@@ -4,14 +4,9 @@
   hmConfigPath,
   ...
 }: let
-  # targets whose HM modules have mkRemovedOptionModule with apply=throw
-  # injecting their full config into the inner eval forces these options, crashing eval
-  badTargets = ["rofi" "vesktop"];
   hm = path: let
-    name = builtins.elemAt path 1;
-  in if lib.elem name badTargets then null
-    else let r = builtins.tryEval (lib.attrByPath (hmConfigPath ++ path) null config);
-    in if r.success then r.value else null;
+    r = builtins.tryEval (lib.attrByPath (hmConfigPath ++ path) null config);
+  in if r.success then r.value else null;
   # helpers for common target patterns
   hmPgm = name: {base = ["programs" name]; enable = hm ["programs" name "enable"];};
   hmSvc = name: {base = ["services" name]; enable = hm ["services" name "enable"];};

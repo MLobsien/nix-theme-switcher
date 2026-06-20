@@ -34,18 +34,21 @@
       inherit (lib) attrByPath setAttrByPath mkDefault filterAttrs mapAttrs recursiveUpdate;
 
       # Recursively strip readOnly and removed option values
-      filterRO = path: value:
-        if !builtins.isAttrs value then value
-        else
-          let opt = attrByPath path null options; in
-          if opt == null then null  # option doesn't exist at this path
-          else if (opt._type or "") == "option" then
-            if opt.readOnly or false || (opt.visible or true) == false
-            then null
-            else value
+      filterRO = path: value: let
+        r = builtins.tryEval (
+          if !builtins.isAttrs value then value
           else
-            filterAttrs (n: v: v != null)
-              (mapAttrs (n: v: filterRO (path ++ [n]) v) value);
+            let opt = attrByPath path null options; in
+            if opt == null then null
+            else if (opt._type or "") == "option" then
+              if opt.readOnly or false || (opt.visible or true) == false
+              then null
+              else value
+            else
+              filterAttrs (n: v: v != null)
+                (mapAttrs (n: v: filterRO (path ++ [n]) v) value)
+        );
+      in if r.success then r.value else null;
       configInjects = builtins.foldl' recursiveUpdate {} (map (inj:
         if inj.value == null then {}
         else setAttrByPath inj.basePath (mkDefault (filterRO inj.basePath inj.value))
@@ -81,16 +84,24 @@
 
   applyTargetsForTheme = theme: let
     themeConfig = themes'.${theme};
-    evalTarget = target: let
-      hm = path: let
-        r = builtins.tryEval (attrByPath path null themeConfig);
-      in if r.success then r.value else null;
-    in {
-      enable = if target.enablePath != null then hm target.enablePath else true;
-      dest = if target.srcPath != null then hm target.srcPath else null;
-      inherit (target) configFiles;
-      reload = target.reload or "";
-    };
+  evalTarget = target: let
+    hm = path: let
+      r = builtins.tryEval (attrByPath path null themeConfig);
+    in if r.success then r.value else null;
+    fromHomeFile = let
+      hf = target.homeFileOf or null;
+    in if hf != null then
+      let base = hm hf.path;
+          key = if base != null then base + (hf.suffix or "") else null;
+      in if key != null then hm (["home" "file" key "source"]) else null
+    else null;
+  in {
+    enable = if target.enablePath != null then hm target.enablePath else true;
+    dest = let fromSrc = if target.srcPath or null != null then hm target.srcPath else null;
+    in if fromSrc != null then fromSrc else fromHomeFile;
+    inherit (target) configFiles;
+    reload = target.reload or "";
+  };
     targetsForTheme = lib.mapAttrs (_: evalTarget) targetPaths // cfg.targets;
     allTargets = themeConfig.stylix.targets;
   in ''

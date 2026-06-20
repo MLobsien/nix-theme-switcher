@@ -146,7 +146,11 @@ in {
   k9s                = pgm "k9s" "k9s/skins/stylix.yaml";
   kitty              = pgm "kitty" "kitty/kitty.conf" // {reload = "killall -SIGUSR1 kitty 2>/dev/null || true";};
   kubecolor          = pgm "kubecolor" "kubecolor/config.yaml";
-  lazygit            = pgm "lazygit" "lazygit/config.yml";
+  lazygit = {
+    enablePath = ["programs" "lazygit" "enable"];
+    homeFileOf = { path = ["xdg" "configHome"]; suffix = "/lazygit/config.yml"; };
+    configFiles = ["$HOME/.config/lazygit/config.yml"];
+  };
   librewolf          = pgmOnly "librewolf";
   mako               = svc "mako" "mako/config" // {reload = "makoctl reload 2>/dev/null || true";};
   mangohud           = pgm "mangohud" "mangohud/MangoHud.conf";
@@ -167,15 +171,27 @@ in {
     srcPath = ["home" "file" ".cache/noctalia/wallpapers.json" "source"];
     configFiles = ["$HOME/.cache/noctalia/wallpapers.json"];
   };
-  nushell            = pgm "nushell" "nushell/themes/stylix.nu";
+  nushell = {
+    enablePath = ["programs" "nushell" "enable"];
+    homeFileOf = { path = ["programs" "nushell" "configDir"]; suffix = "/config.nu"; };
+    configFiles = ["$HOME/.config/nushell/config.nu"];
+  };
   nvf                = pgmOnly "nvf";
   obsidian           = pgmOnly "obsidian";
   opencode           = pgm "opencode" "opencode/themes/stylix.json";
   qt                 = pgm "qt" "Kvantum/kvantum.kvconfig";
-  qutebrowser        = pgm "qutebrowser" "qutebrowser/stylix.css";
+  qutebrowser = {
+    enablePath = ["programs" "qutebrowser" "enable"];
+    homeFileOf = { path = ["xdg" "configHome"]; suffix = "/qutebrowser/config.py"; };
+    configFiles = ["$HOME/.config/qutebrowser/config.py"];
+  };
   rio                = pgm "rio" "rio/config.toml";
   river              = wm "river" "river/init";
-  rofi               = pgm "rofi" "rofi/config.rasi";
+  rofi = {
+    enablePath = ["programs" "rofi" "enable"];
+    homeFileOf = { path = ["programs" "rofi" "configPath"]; };
+    configFiles = ["$HOME/.config/rofi/config.rasi"];
+  };
   sioyek             = pgmOnly "sioyek";
   spicetify          = pgm "spicetify" "spicetify/stylix.json";
   spotify-player     = pgm "spotify-player" "spotify-player/config.toml";
