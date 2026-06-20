@@ -20,7 +20,7 @@
 
   home-manager.users.alice = {
     home.stateVersion = "24.11";
-    programs.bat.enable = true;
+    programs.waybar.enable = true;
   };
 
   environment.systemPackages = with pkgs; [

@@ -11,6 +11,19 @@
     home-manager,
     ...
   }: {
-    nixosModules.default.imports = [(import ./. {inherit stylix home-manager;})];
+    nixosModules.default = {config, ...}: {
+      imports = [
+        (import ./.
+          {
+            inherit stylix home-manager;
+            hmConfigPath = ["home-manager" "users" config.nix-theme-switcher.user];
+          })
+      ];
+    };
+
+    homeModules.default = import ./. {
+      inherit stylix home-manager;
+      hmConfigPath = [];
+    };
   };
 }

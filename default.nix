@@ -1,58 +1,61 @@
 {
   stylix,
   home-manager,
+  hmConfigPath,
 }: {
+  options,
   config,
   lib,
   pkgs,
   ...
-} @ specialArgs: let
+}: let
   cfg = config.nix-theme-switcher;
 
-  inherit (lib) concatStringsSep attrNames concatLines;
+  inherit (lib) concatStringsSep concatStrings attrNames setAttrByPath attrByPath take flatten listToAttrs mapAttrsToList elemAt filter recursiveUpdate mkDefault;
 
   evalTheme = _: themeConfig: let
+    targets = import ./targets/input.nix {inherit config lib hmConfigPath;};
+    targetsConfig = lib.foldl' lib.recursiveUpdate {} (map (target: let
+      basePath = target.value.base;
+      inject = basePath != null && target.value.enable != null && target.value.enable;
+    in
+      { config = if inject then mkDefault (setAttrByPath basePath (attrByPath (hmConfigPath ++ basePath) null config)) else {}; }
+      // (if inject && target.value ? external then { options = setAttrByPath (["options"] ++ basePath) (attrByPath basePath null options); } else {})
+    ) (lib.mapAttrsToList (name: value: {inherit name value;}) targets));
+
     nixosEval = import "${pkgs.path}/nixos/lib/eval-config.nix" {
-      # inherit specialArgs;
       inherit (pkgs.stdenv.hostPlatform) system;
-      modules = let
-        stylixCfg = themeConfig // {enable = true;};
-      in [
+      modules = [
         home-manager.nixosModules.home-manager
-        stylix.nixosModules.stylix
-        {stylix = lib.mkForce stylixCfg;}
         {
           users.users.${cfg.user} = {};
           home-manager.users.${cfg.user} = {
-            home = {
-              stateVersion = "24.11";
-            };
-            stylix = lib.mkForce stylixCfg;
+            imports = [stylix.homeModules.stylix targetsConfig];
+            home = {inherit (config.home-manager.users.${cfg.user}.home) stateVersion;};
+            stylix = themeConfig // {enable = true;};
           };
         }
-        # (lib.removeAttrs config ["_module" "nix-theme-switcher" "passthru"]) #"stylix"])
-        # {options = lib.removeAttrs options ["_module" "nix-theme-switcher" "passthru"];}
       ];
     };
   in
-    nixosEval.config;
+    nixosEval.config.home-manager.users.${cfg.user};
 
-  targets = import ./targets.nix;
+  targetPaths = import ./targets/output.nix;
 
   themes' = lib.mapAttrs evalTheme cfg.themes;
 
   applyTargetsForTheme = theme: let
     themeConfig = themes'.${theme};
-    targetsForTheme =
-      targets {
-        inherit lib;
-        inherit (cfg) user;
-        config = themeConfig;
-      }
-      // cfg.targets;
-    allTargets =
-      themeConfig.stylix.targets
-      // themeConfig.home-manager.users.${cfg.user}.stylix.targets;
+    evalTarget = target: let
+      hm = path: attrByPath path null themeConfig;
+    in {
+      enable = if target.enablePath != null then hm target.enablePath else true;
+      dest = if target.srcPath != null then hm target.srcPath else null;
+      inherit (target) configFiles;
+      reload = target.reload or "";
+    };
+    targetsForTheme = lib.mapAttrs (_: evalTarget) targetPaths // cfg.targets;
+    allTargets = themeConfig.stylix.targets;
   in ''
     "${theme}")
     ${lib.pipe allTargets [
@@ -64,14 +67,14 @@
         name: _: let
           target = targetsForTheme.${name};
         in
-          concatLines (map (file:
+          concatStringsSep "\n" (filter (s: s != "") (map (file:
             if target.dest != null
             then "ln -sf ${target.dest} ${file}"
             else "")
-          target.configFiles)
-          + (target.reload or "")
+          target.configFiles))
+          + (let r = target.reload or ""; in if r != "" then "\n" + r else "")
       ))
-      concatLines
+      (list: concatStringsSep "\n" (filter (s: s != "") list))
     ]}
     ;;
   '';
@@ -81,7 +84,7 @@
   applyThemes = pkgs.writeShellScriptBin "nix-theme-switcher-apply" ''
     applyTheme() {
       case "$1" in
-        ${concatLines (map applyTargetsForTheme themeNames)}
+        ${concatStrings (map applyTargetsForTheme themeNames)}
       esac
     }
 
@@ -129,7 +132,7 @@ in {
     frontend = lib.mkOption {
       type = lib.types.lines;
       default = ''
-        ${pkgs.rofi}/bin/rofi -dmenu -p "Theme"
+        ${pkgs.rofi}/bin/rofi -dmenu
       '';
       defaultText = "rofi -dmenu -p Theme";
       description = "Command to display theme choices. Reads newline separated theme names from stdin, prints chosen name to stdout.";
@@ -145,4 +148,17 @@ in {
   config.nix-theme-switcher = lib.mkIf cfg.enable {
     inherit themes';
   };
+
+  # Force xdg.configFile entries managed by theme targets
+  # so home-manager overwrites existing symlinks on rebuild
+  config.home-manager.users.${cfg.user}.xdg.configFile = lib.mkIf cfg.enable (
+    let
+      isXDGConfig = p: p != null && take 2 p == ["xdg" "configFile"];
+    in
+    listToAttrs (flatten (mapAttrsToList (name: target:
+      if isXDGConfig target.srcPath
+      then [{ name = elemAt target.srcPath 2; value = { force = true; }; }]
+      else []
+    ) targetPaths))
+  );
 }
