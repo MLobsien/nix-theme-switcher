@@ -1,6 +1,7 @@
 {
   pkgs,
   config,
+  nixvim,
   ...
 }: {
   boot.loader.systemd-boot.enable = true;
@@ -19,8 +20,10 @@
   };
 
   home-manager.users.alice = {
+    imports = [ nixvim.homeManagerModules.nixvim ];
     home.stateVersion = "24.11";
     programs.waybar.enable = true;
+    programs.nixvim.enable = true;
   };
 
   environment.systemPackages = with pkgs; [

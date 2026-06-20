@@ -18,9 +18,12 @@
     targetsConfig = lib.foldl' lib.recursiveUpdate {} (map (target: let
       basePath = target.value.base;
       inject = basePath != null && target.value.enable != null && target.value.enable;
+      optsVal = attrByPath (hmConfigPath ++ basePath) null options;
+      # external targets: only inject if options are accessible
+      doInject = if inject && target.value ? external then optsVal != null else inject;
     in
-      { config = if inject then mkDefault (setAttrByPath basePath (attrByPath (hmConfigPath ++ basePath) null config)) else {}; }
-      // (if inject && target.value ? external then { options = setAttrByPath (["options"] ++ basePath) (attrByPath basePath null options); } else {})
+      { config = if doInject then mkDefault (setAttrByPath basePath (attrByPath (hmConfigPath ++ basePath) null config)) else {}; }
+      // (if doInject && target.value ? external then { options = setAttrByPath (["options"] ++ basePath) optsVal; } else {})
     ) (lib.mapAttrsToList (name: value: {inherit name value;}) targets));
 
     nixosEval = import "${pkgs.path}/nixos/lib/eval-config.nix" {
